@@ -30,17 +30,18 @@ def regionplot(key: str = "elderly_population_ratio") -> Figure:
     """
     data_dict = wrangle("data")
     new = data_dict["region"]
-    mean_confirmed = new.groupby("province").mean().sort_values(by=key).reset_index()
+    mean_confirmed = new[[key, "province", "latitude", "longitude"]].groupby(
+        "province").mean().sort_values(by=key).reset_index()
     fig = px.scatter_mapbox(
         mean_confirmed,
         lon="longitude",
         lat="latitude",
         hover_name="province",
         size=key,
-        mapbox_style="stamen-toner",
+        mapbox_style="open-street-map",
         zoom=6,
         center={"lat": 36.302, "lon": 127.7129},
-        opacity=0.5,
+        opacity=1,
     )
     fig.update_layout(
         autosize=False,
@@ -59,7 +60,7 @@ def regionplotcase() -> Figure:
     data_dict = wrangle("data")
     new = data_dict["case"]
     mean_confirmed = (
-        new.groupby("province")
+        new[['confirmed', "province"]].groupby("province")
         .sum()["confirmed"]
         .sort_values()
         .to_frame()
@@ -76,10 +77,10 @@ def regionplotcase() -> Figure:
         lat="lat",
         hover_name="province",
         size="confirmed",
-        mapbox_style="stamen-toner",
+        mapbox_style="open-street-map",
         zoom=6,
         center={"lat": 36.302, "lon": 127.7129},
-        opacity=0.5,
+        opacity=1,
     )
     fig.update_layout(
         autosize=False,
@@ -110,21 +111,20 @@ def wrangle(folder: str) -> DataDict:
 
 def get_nominatim_geocode(address: str) -> tuple[str, str]:
     """
-    This function takes a string (intended to be a location) and returns the longitue and latitude as a tuple
+    This function takes a string (intended to be a location) and returns 
+    the longitue and latitude as a tuple
     Example:
     >>> get_nominatim_geocode('Gyeongsangnam-do')
         ('128.6925', '35.2382')
     """
-    url = (
-        "https://nominatim.openstreetmap.org/search/"
-        + urllib.parse.quote(address)
-        + "?format=json"
-    )
+
+    url = ("https://nominatim.openstreetmap.org/search.php?state"
+           f"={urllib.parse.quote(address)}&format=jsonv2"
+           "&addressdetails=1&limit=1")
     try:
         response = requests.get(url).json()
         return response[0]["lon"], response[0]["lat"]
     except Exception as e:
-        # print(e)
         return None, None
 
 
@@ -208,8 +208,8 @@ def get_cumulative() -> Figure:
         j = j + 1
 
     fig.update_layout(
-        height=800, width=900, title_text="Cumulative Plots", plot_bgcolor="#e5e5e5"
-    )
+        height=800, width=900, title_text="Cumulative Plots",
+        plot_bgcolor="#e5e5e5")
     fig["layout"]["xaxis3"]["title"] = "Date"
     fig["layout"]["yaxis2"]["title"] = "Deceased"
     fig["layout"]["yaxis3"]["title"] = "Mortality Rate"
@@ -242,7 +242,8 @@ def get_pie(option: int, percentage: float = 5) -> Figure:
     new["percentage_confirmed"] = new["confirmed"] / new["confirmed"].sum() * 100
     new["percentage_dead"] = new["deceased"] / new["deceased"].sum() * 100
     new["percentage_released"] = new["released"] / new["released"].sum() * 100
-    options = ["percentage_released", "percentage_dead", "percentage_confirmed"]
+    options = ["percentage_released",
+               "percentage_dead", "percentage_confirmed"]
     mask = new[options[option]] > percentage
     other = (new[options[option]][~mask]).sum()
     new = new[mask]
@@ -269,7 +270,8 @@ def get_cum_province(option: int) -> Figure:
     data_dict = wrangle("data")
     intime = data_dict["timeprovince"]
     options = ["released", "deceased", "confirmed"]
-    pivot = intime.pivot(index="date", columns="province", values=options[option])
+    pivot = intime.pivot(index="date", columns="province",
+                         values=options[option])
     pivot["total"] = pivot.sum(axis=1)
     fig = px.line(data_frame=pivot, x=pivot.index, y=list(pivot.columns))
     fig.update_layout(
@@ -292,11 +294,10 @@ def elderly_pop(sorted: bool) -> Figure:
     mask = region["province"] != "Korea"
     sorter = list(new.sort_values(by="confirmed", ascending=False)["province"])
     new_region = (
-        region[mask]
+        region[mask][['province', 'elderly_population_ratio']]
         .groupby("province")
         .mean()
-        .elderly_population_ratio.sort_values()
-        .to_frame()
+        .sort_values(by='elderly_population_ratio')
         .reset_index()
     )
     if sorted == "Population":
@@ -318,7 +319,11 @@ def get_sex(option: str) -> Figure:
     data_dict = wrangle("data")
     data = data_dict["timegender"]
     mask = data["date"] == "2020-06-30"
-    fig = px.pie(data[mask], values=option.lower(), names=["Male", "Female"], hole=0.4)
+    fig = px.pie(
+        data[mask],
+        values=option.lower(),
+        names=["Male", "Female"],
+        hole=0.4)
     fig.update_traces(textposition="inside", textinfo="percent+label")
     fig.update_traces(
         textposition="inside",
@@ -386,13 +391,14 @@ def get_cum_test(daily: str = "Cummulative") -> Figure:
 
 def group() -> Figure:
     """
-    This function compues a pie about infection cases, specifically the percentages of group vs individual infections
+    This function computes a pie chart about infection cases, 
+    specifically the percentages of group vs individual infections
     """
     data_dict = wrangle("data")
     data = data_dict["case"]
     fig = px.pie(
         data["group"].value_counts(),
-        values="group",
+        values="count",
         names=["Individual infection", "Group infection"],
         hole=0.4,
     )
@@ -471,14 +477,15 @@ def weather(option: string = "Humidity", date: bool = False) -> Figure:
         "Precipitation": "precipitation",
     }
     avgw = (
-        weatherdf.groupby("province")
+        weatherdf[['province', options[option]]].groupby("province")
         .mean()
         .reset_index()
         .sort_values(by=[options[option]], ascending=False)
     )
     if date:
         mask = weatherdf["date"] == date
-        avgw = weatherdf[mask].sort_values(by=[options[option]], ascending=False)
+        avgw = weatherdf[mask].sort_values(
+            by=[options[option]], ascending=False)
     fig = go.Figure()
     fig.add_trace(
         go.Bar(
@@ -506,7 +513,7 @@ def temp(date: bool = False) -> Figure:
     data_dict = wrangle("data")
     weather = data_dict["weather"]
     avgw = (
-        weather.groupby("province")
+        weather[["province", "avg_temp", "max_temp", "min_temp"]].groupby("province")
         .mean()
         .reset_index()
         .sort_values(by=["avg_temp"], ascending=False)
@@ -560,7 +567,8 @@ def get_cum_weather(option: str) -> Figure:
         "Max Temperature": "max_temp",
     }
     intime = data_dict["weather"]
-    pivot = intime.pivot(index="date", columns="province", values=options[option])
+    pivot = intime.pivot(index="date", columns="province",
+                         values=options[option])
     fig = px.line(
         data_frame=pivot,
         x=pivot.index,
@@ -578,8 +586,8 @@ def get_cum_weather(option: str) -> Figure:
 
 
 def contact(
-    cut: int = 7e10, describe: bool = False, confirmed: bool = False, min: bool = False
-) -> Figure:
+        cut: int = 7e10, describe: bool = False, confirmed: bool = False,
+        min: bool = False) -> Figure:
     """
     This function plots the distribution for the contact number of infected patients, if describe
     equals true it instead returns a dataframe with the summary of the data, if confirmed equals true
@@ -653,8 +661,8 @@ def contact(
         scalemode="count",
     )
     fig.update_layout(
-        yaxis_zeroline=False, plot_bgcolor="#e5e5e5", yaxis_title="Contact Number"
-    )
+        yaxis_zeroline=False, plot_bgcolor="#e5e5e5",
+        yaxis_title="Contact Number")
     return fig
 
 
@@ -670,7 +678,8 @@ def searchtrend(
     search = data_dict["searchtrend"]
     mask = (search.date >= date1) & (search.date <= date2)
     search.rename(columns=str.capitalize, inplace=True)
-    fig = px.line(search[mask], x="Date", y=["Cold", "Flu", "Pneumonia", "Coronavirus"])
+    fig = px.line(search[mask], x="Date", y=[
+                  "Cold", "Flu", "Pneumonia", "Coronavirus"])
     fig.update_layout(
         yaxis_title="Relative interest (0-100)",
         plot_bgcolor="#e5e5e5",
@@ -820,15 +829,14 @@ def get_trend_con(regression: bool = False, lag: int = 0) -> Figure:
         )
         return fig
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_trace(
-        go.Scatter(x=newf.index, y=newf.coronavirus_search, name="Search Trend")
-    )
-    fig.add_trace(
-        go.Scatter(x=df.index, y=df.confirmed, name="Confirmed cases"), secondary_y=True
-    )
+    fig.add_trace(go.Scatter(
+        x=newf.index, y=newf.coronavirus_search,
+        name="Search Trend"))
+    fig.add_trace(go.Scatter(x=df.index, y=df.confirmed,
+                             name="Confirmed cases"), secondary_y=True)
     fig.update_layout(
-        plot_bgcolor="#e5e5e5", yaxis_title="Relative Interest (%)", xaxis_title="Date"
-    )
+        plot_bgcolor="#e5e5e5", yaxis_title="Relative Interest (%)",
+        xaxis_title="Date")
     fig.update_yaxes(title_text="Confirmed cases", secondary_y=True)
     return fig
 
@@ -845,7 +853,7 @@ def arima(update: bool = False) -> Figure:
     df = df.diff().dropna()
     X = df["confirmed"].values
     size = int(len(X) * 0.66)
-    train, test = X[0:size], X[size : len(X)]
+    train, test = X[0:size], X[size: len(X)]
     history = [x for x in train]
     predictions = list()
     # walk-forward validation
@@ -860,8 +868,13 @@ def arima(update: bool = False) -> Figure:
             obs = yhat
         history.append(obs)
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_trace(go.Scatter(x=df.index, y=df["confirmed"], name="Confirmed Cases"))
-    fig.add_trace(go.Scatter(x=df.index, y=train.tolist() + predictions, name="ARIMA"))
+    fig.add_trace(
+        go.Scatter(
+            x=df.index, y=df["confirmed"],
+            name="Confirmed Cases"))
+    fig.add_trace(
+        go.Scatter(
+            x=df.index, y=train.tolist() + predictions, name="ARIMA"))
     fig.add_vline(
         x=df.confirmed.index.tolist()[int(len(X) * 0.66)],
         line_width=3,
@@ -869,8 +882,8 @@ def arima(update: bool = False) -> Figure:
         line_color="green",
     )
     fig.update_layout(
-        plot_bgcolor="#e5e5e5", yaxis_title="Confirmed cases", xaxis_title="Date"
-    )
+        plot_bgcolor="#e5e5e5", yaxis_title="Confirmed cases",
+        xaxis_title="Date")
     return fig
 
 
@@ -896,7 +909,8 @@ def pca_data(data: bool = False) -> Figure:
     X_train = sc.fit_transform(final)
     X_train = pca.fit_transform(X_train)
     fig = px.scatter(X_train[:, 0], X_train[:, 1])
-    fig.update_layout(plot_bgcolor="#e5e5e5", yaxis_title="PCA 1", xaxis_title="PCA 2")
+    fig.update_layout(plot_bgcolor="#e5e5e5",
+                      yaxis_title="PCA 1", xaxis_title="PCA 2")
     return fig
 
 
@@ -909,13 +923,11 @@ def seoulpop(x: str = "Population") -> Figure:
     data_dict = wrangle("data")
     data = data_dict["seoulfloating"]
     if x == "Population":
+        toplot = (data[['fp_num', 'date', 'hour']].groupby(["date", "hour"]).sum(
+        ).groupby("date").mean().apply(lambda x: x / 1e6).reset_index())
         fig = px.bar(
-            x=data.date.unique(),
-            y=data.groupby(["date", "hour"])
-            .sum()
-            .groupby("date")
-            .fp_num.mean()
-            .apply(lambda x: x / 1e6),
+            x=toplot['date'],
+            y=toplot['fp_num'],
         )
         fig.update_layout(
             plot_bgcolor="#e5e5e5",
@@ -925,7 +937,8 @@ def seoulpop(x: str = "Population") -> Figure:
 
     if x == "Gender":
         labels = ["Female", "Male"]
-        seoul_female, seoul_male = data[data.sex == "female"], data[data.sex == "male"]
+        seoul_female, seoul_male = data[data.sex ==
+                                        "female"], data[data.sex == "male"]
         values = [seoul_female.fp_num.sum(), seoul_male.fp_num.sum()]
         fig = go.Figure(
             data=[
@@ -947,20 +960,13 @@ def seoulpop(x: str = "Population") -> Figure:
             marker=dict(line=dict(color="#000000", width=2)),
         )
     if x == "Age":
-        float_age_order = list(
-            data.groupby("birth_year")
-            .sum()
-            .sort_values("fp_num", ascending=False)
-            .index
-        )
+        data.date = pd.to_datetime(data.date)
+        vals = data.groupby('birth_year')['fp_num'].sum()
         fig = go.Figure(
             data=[
                 go.Pie(
-                    labels=float_age_order,
-                    values=data.groupby("birth_year")
-                    .sum()
-                    .sort_values("fp_num", ascending=False)
-                    .fp_num,
+                    labels=vals.index,
+                    values=vals,
                     textinfo="label+percent",
                     insidetextorientation="radial",
                     hole=0.4,
